@@ -14,7 +14,7 @@ The main application is gr_omnicon.py. For a complete list of options run:
 $ ./gr_omnicon.py --help
 ````
 
-When used with gr-osmosdr compatible devices the defaults should suffice. 
+When used with gr-osmosdr compatible devices the defaults should suffice but supplying a ppm value is recommened when using rtl-sdr devices.
 
 ### Dependencies
 

@@ -38,7 +38,7 @@ class Message(object):
             quit()
         message_length = self._manchester2byte(length_bits)
         self._message.append(message_length)
-        for i in range(message_length - 1):
+        for _ in range(message_length - 1):
             byte = self._manchester2byte(filehandle.read(16))
             self._message.append(byte)
 
@@ -170,10 +170,10 @@ class Message(object):
             unordered_address = ([self._message[3+i*4:7+i*4] for i in range(num_addresses)])
             for i in range(num_addresses):
                 current_address = unordered_address[(current_hop + i) % num_addresses]
-                addresses.append(current_address)
                 flag = (current_address[0] & 0xF0) >> 4
-                flags.append(flag)
                 current_address[0] &= 0x0F
+                flags.append(flag)
+                addresses.append(current_address)
                 if i == (num_addresses - current_hop - 1):
                     is_sending.append(True)
                 else:
@@ -235,16 +235,21 @@ class Message(object):
 
 class FlowWrapper(object):
     """
-    Gnuradio msg_queue returns an arbitrary amount of data. This class wraps a msg_queue to mimic a filehandle.
+    Gnuradio msg_queue returns an arbitrary amount of data. This class wraps a msg_queue to mimic a filehandle and
+    optionally write all data from the msg_queue to a file.
     """
-    def __init__(self, msg_queue):
+    def __init__(self, msg_queue, outfile=None):
         self._msg_queue = msg_queue
         self._bit_queue = deque()
+        self._outfile = outfile
 
     def read(self, num):
         while len(self._bit_queue) < num:
             self._bit_queue.extend([i for i in self._msg_queue.delete_head().to_string()])
-        return "".join([self._bit_queue.popleft() for _ in range(num)])
+        return_string = "".join([self._bit_queue.popleft() for _ in range(num)])
+        if self._outfile is not None:
+            self._outfile.write(return_string)
+        return return_string
 
     def close(self):
         pass
@@ -277,7 +282,6 @@ def main():
     parser.add_argument('-x', '--osmosdr_args', default="numchan=1", help="optional arguments to osmosdr. e.g. "
                         "\"rtl_tcp=10.0.0.2:1234\" for connecting to an rtl_tcp server")
     args = parser.parse_args()
-    print(args)
 
     if args.debug_output and args.debug_input:
         print("Writing debug file while reading from debugfile makes no sense")
@@ -290,9 +294,10 @@ def main():
     if infile is None:
         freq = gnuradio.eng_notation.str_to_num(args.freq)
         flow = gr_omnicon_flow.gr_omnicon_flow(freq, args.ppm, args.osmosdr_args)
-        infile = FlowWrapper(flow.msgq_out)
+        infile = FlowWrapper(flow.msgq_out, outfile)
         flow.start()
-        print("\nIf no messages are printed within a few hours try a different frequency or check antenna")
+        print("\nIf no messages are printed within a few hours try a different frequency,")
+        print("check the antenna or make sure the supplied ppm correction is correct.")
         print("Listening on frequency " + gnuradio.eng_notation.num_to_str(freq) + " with osmosdr "
               "arguments \"" + args.osmosdr_args + "\"")
         print("="*80)
@@ -306,8 +311,6 @@ def main():
             bit = infile.read(1)  # todo check read error exception
             if bit is None or bit == "":
                 break
-            if outfile is not None:
-                outfile.write(bit)
             # Each transmission begins with a lead-in with 100 bits of alternating 0 & 1s.
             # After the lead-in there is a syncword = 00001111 and then the actual data.
             # bits are in gnuradio unpacked form.
@@ -324,6 +327,7 @@ def main():
                     print("Message with bad CRC", end="\n\n")
         except KeyboardInterrupt:
             break
+
     if graphfile is not None:
         graphfile.write("}")
         graphfile.close()
