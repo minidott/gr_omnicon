@@ -16,9 +16,10 @@
 
 from __future__ import print_function
 import argparse
-import gnuradio.eng_notation
+from datetime import datetime
 from collections import deque
 
+import gnuradio.eng_notation
 import crcmod
 
 import gr_omnicon_flow
@@ -70,7 +71,8 @@ class Message(object):
         query_type2 = 3
         reply_type2 = 4
         announce = 5
-        unknown = 6
+        announce_type2 = 6
+        unknown = 7
 
     def get_type(self):
         """
@@ -93,6 +95,8 @@ class Message(object):
                 return_type = self.Type.reply_type2
             elif self._message[1] == 0xC0:
                 return_type = self.Type.announce
+            elif self._message[1] == 0xD0:
+                return_type = self.Type.announce_type2
             else:
                 return_type = self.Type.unknown
         except IndexError:
@@ -146,6 +150,8 @@ class Message(object):
             return "Message type: reply type 2?\n"
         elif message_type is self.Type.announce:
             return "Message type: bootstrap announce ping?\n"
+        elif message_type is self.Type.announce_type2:
+            return "Message type: bootstrap announce ping type 2?\n"
         else:
             return "Message type: unknown\n"
 
@@ -320,6 +326,8 @@ def main():
             if syncword == 0x5555550F:
                 message = Message(infile)
                 if message.valid_crc():
+                    if args.debug_input is None:
+                        print("Message received: " + str(datetime.now()))
                     print(str(message))
                     if graphfile is not None:
                         graphfile.write(message.graphviz_relations())
